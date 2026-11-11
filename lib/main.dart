@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'providers/theme_provider.dart';
 import 'providers/timer_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
@@ -7,17 +9,31 @@ import 'services/notification_service.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await NotificationService.init();
-  runApp(const ProviderScope(child: SilentTimerApp()));
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  final initialTheme =
+      themeModeFromName(prefs.getString(themeModePreferenceKey));
+  runApp(
+    ProviderScope(
+      overrides: [
+        themeModeProvider
+            .overrideWith((ref) => ThemeModeNotifier(initialTheme)),
+      ],
+      child: const SilentTimerApp(),
+    ),
+  );
 }
 
-class SilentTimerApp extends StatelessWidget {
+class SilentTimerApp extends ConsumerWidget {
   const SilentTimerApp({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final themeMode = ref.watch(themeModeProvider);
     return MaterialApp(
       title: 'Silent Timer',
       debugShowCheckedModeBanner: false,
+      themeMode: themeMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(
           seedColor: const Color(0xFF4A6FA5),

@@ -1,9 +1,20 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:silent_timer/models/prayer_settings.dart';
 import 'package:silent_timer/models/prayer_time.dart';
+import 'package:silent_timer/providers/theme_provider.dart';
 import 'package:silent_timer/services/prayer_service.dart';
 
 void main() {
+  group('Theme mode', () {
+    test('defaults to system and cycles system -> light -> dark', () {
+      expect(themeModeFromName(null), ThemeMode.system);
+      expect(nextThemeMode(ThemeMode.system), ThemeMode.light);
+      expect(nextThemeMode(ThemeMode.light), ThemeMode.dark);
+      expect(nextThemeMode(ThemeMode.dark), ThemeMode.system);
+    });
+  });
+
   group('PrayerSettings', () {
     test('defaults match the requested iqamah schedule', () {
       final settings = PrayerSettings.defaults();

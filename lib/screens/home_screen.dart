@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/preset_model.dart';
 import '../models/prayer_settings.dart';
 import '../models/prayer_time.dart';
+import '../providers/theme_provider.dart';
 import '../providers/timer_provider.dart';
 import '../services/notification_service.dart';
 import '../services/prayer_service.dart';
@@ -177,7 +178,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               const SizedBox(height: 8),
               Text(
                 'The QS tile will silence your phone for this duration instantly.',
-                style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                style: TextStyle(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    fontSize: 13),
               ),
               const SizedBox(height: 20),
               Center(
@@ -210,7 +213,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                   ),
                   const SizedBox(width: 12),
                   Text('±5 min',
-                      style: TextStyle(color: Colors.grey[600])),
+                      style: TextStyle(
+                          color:
+                              Theme.of(context).colorScheme.onSurfaceVariant)),
                   const SizedBox(width: 12),
                   IconButton.filledTonal(
                     onPressed:
@@ -320,6 +325,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
     final timerState = ref.watch(timerProvider);
+    final themeMode = ref.watch(themeModeProvider);
     final isRunning = timerState.status == TimerStatus.running;
 
     return Scaffold(
@@ -328,6 +334,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
             style: TextStyle(fontWeight: FontWeight.bold)),
         centerTitle: false,
         actions: [
+          IconButton(
+            tooltip: _themeTooltip(themeMode),
+            icon: Icon(_themeIcon(themeMode)),
+            onPressed: () => ref.read(themeModeProvider.notifier).cycle(),
+          ),
           IconButton(
             tooltip: 'Prayer mode',
             icon: const Icon(Icons.mosque),
@@ -639,11 +650,11 @@ class _ActiveBanner extends StatelessWidget {
                   tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
                 child: stopping
-                    ? const SizedBox(
+                    ? SizedBox(
                         width: 16,
                         height: 16,
                         child: CircularProgressIndicator(
-                            strokeWidth: 2, color: Colors.white),
+                            strokeWidth: 2, color: colors.onError),
                       )
                     : const Text('Stop'),
               ),
@@ -653,6 +664,22 @@ class _ActiveBanner extends StatelessWidget {
       ),
     );
   }
+}
+
+IconData _themeIcon(ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.system => Icons.brightness_auto,
+    ThemeMode.light => Icons.light_mode,
+    ThemeMode.dark => Icons.dark_mode,
+  };
+}
+
+String _themeTooltip(ThemeMode mode) {
+  return switch (mode) {
+    ThemeMode.system => 'Theme: system (tap to switch)',
+    ThemeMode.light => 'Theme: light (tap to switch)',
+    ThemeMode.dark => 'Theme: dark (tap to switch)',
+  };
 }
 
 class _IdleBanner extends StatelessWidget {
