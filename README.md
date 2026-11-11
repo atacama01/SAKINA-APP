@@ -1,16 +1,41 @@
-# silent_timer
+# SAKINA — Silent Timer
 
-A new Flutter project.
+SAKINA silences your phone for a chosen duration, and can optionally silence it
+automatically for each prayer after iqamah.
 
-## Getting Started
+## Features
 
-This project is a starting point for a Flutter application.
+- Quick presets, a custom timer, and a Quick Settings tile.
+- Optional automatic prayer silence with per-prayer controls:
+  - Fajr defaults to a 20 minute iqamah delay.
+  - Dhuhr, Asr and Isha default to 15 minutes.
+  - Maghrib defaults to 7 minutes.
+  - Every prayer is silent for 20 minutes by default.
+  - Each prayer can be enabled or disabled independently, and every delay and
+    duration can be edited.
+- Prayer times from the free [AlAdhan API](https://aladhan.com/prayer-times-api).
+  No account, API key, subscription or ads are required.
+- Manual city/country or current GPS location.
+- Prayer times are cached on the device. The native Android alarm schedule keeps
+  working when the app is closed and restores automatically after a reboot.
+- A short “Sound restored” notification when a timer ends, and the timer
+  notification is removed immediately when you stop it.
 
-A few resources to get you started if this is your first Flutter project:
+## Permissions
 
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
+- **Do Not Disturb access** — required to change the ringer mode.
+- **Notifications** — used for the active timer and prayer status messages.
+- **Location** — only requested when you choose “Use my current location”.
+- **Exact alarms** — recommended so prayer silence starts on time; Android 12+
+  may ask you to allow it in Settings.
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+## Building
+
+```bash
+flutter pub get
+flutter run
+```
+
+The prayer auto-silence feature is Android-only. It uses native `AlarmManager`
+alarms and broadcast receivers, so it does not depend on the Flutter process
+staying alive.

@@ -44,4 +44,48 @@ class SilentService {
       await _channel.invokeMethod('cancelScheduledRestore');
     } catch (_) {}
   }
+
+  static Future<bool> scheduleRestore(int endTimeMs) async {
+    try {
+      return await _channel.invokeMethod<bool>(
+            'scheduleRestore',
+            {'endTime': endTimeMs},
+          ) ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> refreshPrayerSchedule() async {
+    try {
+      return await _channel.invokeMethod<bool>('refreshPrayerSchedule') ??
+          false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static Future<bool> canScheduleExactAlarms() async {
+    try {
+      return await _channel.invokeMethod<bool>('canScheduleExactAlarms') ??
+          true;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  static Future<void> openExactAlarmSettings() async {
+    try {
+      await _channel.invokeMethod('openExactAlarmSettings');
+    } catch (_) {}
+  }
+
+  static Future<bool> testPrayerSilence() async {
+    try {
+      return await _channel.invokeMethod<bool>('testPrayerSilence') ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
 }

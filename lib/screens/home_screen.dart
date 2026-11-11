@@ -1,10 +1,15 @@
-import 'dart:ui';
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/preset_model.dart';
+import '../models/prayer_settings.dart';
+import '../models/prayer_time.dart';
 import '../providers/timer_provider.dart';
+import '../services/notification_service.dart';
+import '../services/prayer_service.dart';
 import '../services/silent_service.dart';
+import 'prayer_settings_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -17,16 +22,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
     with WidgetsBindingObserver {
   int _tilePresetMinutes = 30;
   bool _stopping = false;
+  PrayerStatus? _prayerStatus;
+  Timer? _syncPoll;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _loadTilePreset();
+    unawaited(_loadPrayerStatus(refresh: true));
+
+    // Keep the screen in sync when a native prayer alarm starts or ends while
+    // the app is already open.
+    _syncPoll = Timer.periodic(const Duration(seconds: 15), (_) {
+      if (!mounted) return;
+      ref.read(timerProvider.notifier).syncState();
+      _loadPrayerStatus();
+    });
   }
 
   @override
   void dispose() {
+    _syncPoll?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
@@ -38,7 +55,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       // This catches: tile started, tile stopped, tile replaced timer.
       ref.read(timerProvider.notifier).syncState();
       _loadTilePreset();
+      unawaited(_loadPrayerStatus(refresh: true));
     }
+  }
+
+  Future<void> _loadPrayerStatus({bool refresh = false}) async {
+    final status = await PrayerService.status();
+    if (mounted) setState(() => _prayerStatus = status);
+
+    if (refresh) {
+      unawaited(
+        PrayerService.ensureSchedule().then((_) {
+          if (mounted) _loadPrayerStatus();
+        }),
+      );
+    }
+  }
+
+  void _openPrayerSettings() {
+    Navigator.of(context)
+        .push(
+          MaterialPageRoute(
+            builder: (_) => const PrayerSettingsScreen(),
+          ),
+        )
+        .then((_) {
+      _loadPrayerStatus(refresh: true);
+      ref.read(timerProvider.notifier).syncState();
+    });
   }
 
   Future<void> _loadTilePreset() async {
@@ -63,7 +107,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
       _showDndDialog();
       return;
     }
-    await ref.read(timerProvider.notifier).start(minutes);
+
+    await NotificationService.requestPermission();
+    final started = await ref.read(timerProvider.notifier).start(minutes);
+    if (!started && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Could not enable silent mode. Check DND access.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _stopTimer() async {
@@ -275,6 +329,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
         centerTitle: false,
         actions: [
           IconButton(
+            tooltip: 'Prayer mode',
+            icon: const Icon(Icons.mosque),
+            onPressed: _openPrayerSettings,
+          ),
+          IconButton(
             tooltip: 'Tile preset',
             icon: const Icon(Icons.tune),
             onPressed: _showTilePresetSheet,
@@ -306,6 +365,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                           'Tile preset: ${_formatDuration(_tilePresetMinutes)} — tap ⚙ to change',
                       colors: colors,
                     ),
+            ),
+
+            const SizedBox(height: 12),
+
+            _PrayerCard(
+              status: _prayerStatus,
+              onTap: _openPrayerSettings,
             ),
 
             const SizedBox(height: 24),
@@ -367,6 +433,127 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
 
 // ── Widgets ─────────────────────────────────────────────────────────
 
+String _formatClock(BuildContext context, DateTime dateTime) {
+  return MaterialLocalizations.of(context).formatTimeOfDay(
+    TimeOfDay.fromDateTime(dateTime),
+    alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(context),
+  );
+}
+
+class _PrayerCard extends StatelessWidget {
+  final PrayerStatus? status;
+  final VoidCallback onTap;
+
+  const _PrayerCard({required this.status, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final settings = status?.settings;
+    final enabled = settings?.enabled ?? false;
+    final next = status?.next;
+    final current = status?.current;
+    final cacheUsable = status?.hasUsableSchedule ?? false;
+
+    final String subtitle;
+    if (enabled && current != null) {
+      subtitle = 'Now: ${current.prayer.label} · silent until '
+          '${_formatClock(context, current.silenceEnd)}';
+    } else if (enabled && next != null) {
+      subtitle = 'Next: ${next.prayer.label} · '
+          '${_formatClock(context, next.silenceStart)}–'
+          '${_formatClock(context, next.silenceEnd)}';
+    } else if (enabled && !cacheUsable) {
+      subtitle = 'On · prayer times need refreshing';
+    } else if (enabled) {
+      subtitle = 'On · no upcoming prayer in saved times';
+    } else {
+      subtitle = 'Off · automatic silence after iqamah';
+    }
+
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: colors.tertiaryContainer,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Icon(Icons.mosque, color: colors.onTertiaryContainer),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Text(
+                        'Prayer mode',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: colors.onTertiaryContainer,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: enabled
+                              ? colors.primary
+                              : colors.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          enabled ? 'ON' : 'OFF',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.bold,
+                            color: enabled
+                                ? colors.onPrimary
+                                : colors.onSurfaceVariant,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: colors.onTertiaryContainer,
+                    ),
+                  ),
+                  if (enabled && (settings?.displayLocation.isNotEmpty ?? false))
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        settings!.displayLocation,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: colors.onTertiaryContainer
+                              .withValues(alpha: 0.7),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.chevron_right,
+              color: colors.onTertiaryContainer.withValues(alpha: 0.7),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _ActiveBanner extends StatelessWidget {
   final String timeStr;
   final bool stopping;
@@ -418,7 +605,7 @@ class _ActiveBanner extends StatelessWidget {
           Text('remaining',
               style: TextStyle(
                   fontSize: 12,
-                  color: colors.onErrorContainer.withOpacity(0.7))),
+                  color: colors.onErrorContainer.withValues(alpha: 0.7))),
           const SizedBox(height: 12),
           Row(
             children: [
@@ -430,7 +617,7 @@ class _ActiveBanner extends StatelessWidget {
                         foregroundColor: colors.onErrorContainer,
                         side: BorderSide(
                             color:
-                                colors.onErrorContainer.withOpacity(0.4)),
+                                colors.onErrorContainer.withValues(alpha: 0.4)),
                         padding: const EdgeInsets.symmetric(
                             horizontal: 10, vertical: 6),
                         minimumSize: Size.zero,
