@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ic_stat_sakina is referenced by name from Dart/Kotlin at runtime, so the
+  resource shrinker cannot see it. Keep it in release builds or notifications
+  lose their small icon.
+-->
+<resources xmlns:tools="http://schemas.android.com/tools"
+    tools:keep="@drawable/ic_stat_sakina" />

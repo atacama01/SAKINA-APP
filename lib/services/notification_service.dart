@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 class NotificationService {
@@ -59,12 +60,17 @@ class NotificationService {
       icon: _smallIcon,
     );
 
-    await _plugin.show(
-      _notifId,
-      'Phone is silenced',
-      'Restoring sound in $timeStr',
-      const NotificationDetails(android: details),
-    );
+    try {
+      await _plugin.show(
+        _notifId,
+        'Phone is silenced',
+        'Restoring sound in $timeStr',
+        const NotificationDetails(android: details),
+      );
+    } catch (error) {
+      // Notification problems must not interrupt a running timer.
+      debugPrint('Could not update the timer notification: $error');
+    }
   }
 
   static Future<void> showRestoredNotification() async {
@@ -84,16 +90,26 @@ class NotificationService {
     );
     // Use a separate id so the periodic timer sync cannot cancel the brief
     // confirmation message.
-    await _plugin.cancel(_notifId);
-    await _plugin.show(
-      _restoredNotifId,
-      'Sound restored',
-      'Your phone is back to normal.',
-      const NotificationDetails(android: details),
-    );
+    try {
+      await _plugin.cancel(_notifId);
+      await _plugin.show(
+        _restoredNotifId,
+        'Sound restored',
+        'Your phone is back to normal.',
+        const NotificationDetails(android: details),
+      );
+    } catch (error) {
+      // Finishing the timer (and clearing its persisted state) must not
+      // depend on the notification plugin succeeding.
+      debugPrint('Could not show the restored notification: $error');
+    }
   }
 
   static Future<void> cancel() async {
-    await _plugin.cancel(_notifId);
+    try {
+      await _plugin.cancel(_notifId);
+    } catch (error) {
+      debugPrint('Could not cancel the timer notification: $error');
+    }
   }
 }

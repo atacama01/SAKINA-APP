@@ -6,13 +6,26 @@ import 'providers/timer_provider.dart';
 import 'screens/home_screen.dart';
 import 'services/notification_service.dart';
 
-void main() async {
+const _startupTimeout = Duration(seconds: 8);
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService.init();
-  final prefs = await SharedPreferences.getInstance();
-  await prefs.reload();
-  final initialTheme =
-      themeModeFromName(prefs.getString(themeModePreferenceKey));
+
+  // Startup work must never prevent the app from showing its UI. If a plugin
+  // or the preferences store misbehaves, continue with safe defaults.
+  var initialTheme = ThemeMode.system;
+  try {
+    await NotificationService.init().timeout(_startupTimeout);
+  } catch (error, stack) {
+    debugPrint('Notification setup failed: $error\n$stack');
+  }
+
+  try {
+    initialTheme = await _loadInitialTheme().timeout(_startupTimeout);
+  } catch (error, stack) {
+    debugPrint('Could not load the saved theme: $error\n$stack');
+  }
+
   runApp(
     ProviderScope(
       overrides: [
@@ -22,6 +35,12 @@ void main() async {
       child: const SilentTimerApp(),
     ),
   );
+}
+
+Future<ThemeMode> _loadInitialTheme() async {
+  final prefs = await SharedPreferences.getInstance();
+  await prefs.reload();
+  return themeModeFromName(prefs.getString(themeModePreferenceKey));
 }
 
 class SilentTimerApp extends ConsumerWidget {
@@ -70,8 +89,18 @@ class _AppEntryState extends ConsumerState<AppEntry> {
   }
 
   Future<void> _init() async {
-    await ref.read(timerProvider.notifier).resumeIfActive();
-    if (mounted) setState(() => _ready = true);
+    try {
+      await ref
+          .read(timerProvider.notifier)
+          .resumeIfActive()
+          .timeout(_startupTimeout);
+    } catch (error, stack) {
+      // A failed restore must not leave the user on the loading screen. The
+      // home screen will retry the sync when it is shown / resumed.
+      debugPrint('Could not restore the timer state: $error\n$stack');
+    } finally {
+      if (mounted) setState(() => _ready = true);
+    }
   }
 
   @override

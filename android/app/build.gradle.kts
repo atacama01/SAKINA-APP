@@ -12,8 +12,8 @@ android {
         applicationId = "com.silent_timer.silent_timer"
         minSdk = flutter.minSdkVersion
         targetSdk = 36
-        versionCode = 2
-        versionName = "2.0.0"
+        versionCode = 3
+        versionName = "2.0.1"
     }
 
     compileOptions {
